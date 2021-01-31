@@ -1,7 +1,7 @@
 import pybullet as p
 import pybullet_data
 import numpy as np
-
+import time
 
 '''
 Define a class for the UR5 pybullet simulator
@@ -11,5 +11,225 @@ NOTE: https://gramaziokohler.github.io/compas_fab/latest/examples/03_backends_ro
 the above link has a way to mfg custuom UDRF file format
 '''
 
+UR5PATH = "ur_e_description/urdf/ur5e.urdf"
+UR5_BASE_POSITION = [0,0,0]             ## Base position in x,y,z coordinates
+UR5_BASE_ORIENTATION = [0,0,0,1]        ## Base orientation in unit quaternions
+
+
+
+class UR5manipulator():
+    
+    def __init__(self):
+        
+        p.connect(p.GUI)
+        p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        p.setGravity(0,0,-9.81)
+        #self.plane = p.loadURDF("plane.urdf")
+        self.robotID = p.loadURDF(UR5PATH, basePosition = UR5_BASE_POSITION, baseOrientation = UR5_BASE_ORIENTATION,
+                                  useFixedBase = False)
+        self.controlableJoints = []
+        
+        self.numJoints = p.getNumJoints(self.robotID)
+        print("NUmber of Joints: ", self.numJoints)
+        
+        for jointIndex in range(self.numJoints):
+
+            if p.getJointInfo(self.robotID,jointIndex)[2] == 0:
+                self.controlableJoints.append(jointIndex)
+        
+        print(self.controlableJoints)
+        self.endEffectorLink = self.controlableJoints[-1]
+        
+    
+    def setJointAngles(self,jointAngles):
+        zero = [0]*6 
+        p.setJointMotorControlArray(self.robotID,self.controlableJoints,controlMode = p.POSITION_CONTROL ,targetPositions = jointAngles,targetVelocities = zero)
+        
+        for __ in range(200):
+            p.stepSimulation()
+               
+                
+    def getForwardKinematics(self):
+        
+        endEffector = p.getLinkState(self.robotID,self.endEffectorLink)
+        pos,ori = endEffector[0],p.getEulerFromQuaternion(endEffector[1])
+        
+        return pos,ori
+    
+    def getInverseKinematics(self,endEffector):
+        '''
+        End Effector pos : to be in pos, ori
+        '''
+        jointAngles = p.calculateInverseKinematics(ur5.robotID,self.endEffectorLink,endEffector[0],
+                                                   p.getQuaternionFromEuler(endEffector[1]))
+        
+        return jointAngles
+        
+    def calculateJacobian(self,jointNagles):
+        endEffectorState = p.getLinkState(self.robotID,self.endEffectorLink)
+        
+        zero = [0]*6
+        
+        jacobianLinear,jacobianRotational = p.calculateJacobian(self.robotID,self.endEffectorLink,endEffectorState[2],jointNagles,zero,zero)
+        
+        jacobianLinear = np.array(jacobianLinear)
+        jacobianRotational = np.array(jacobianRotational)
+        
+        return np.vstack((jacobianRotational,jacobianLinear))
+    
+    
+    def getDynamicMatrices(self):
+        
+        jointInfo = p.getJointStates(self.robotID,self.controlableJoints)
+
+        jointAngles ,jointVel = [],[]
+        
+        for i in range(len(self.controlableJoints)):
+            jointAngles.append(jointInfo[i][0])
+            jointVel.append(jointInfo[i][1])
+        zero = [0]*6
+        
+        massMatrix = np.array(p.calculateMassMatrix(self.robotID,jointAngles))
+
+        gravityMatrix = np.array(p.calculateInverseDynamics(self.robotID,jointAngles,zero,zero))
+        
+        coriolisMatrix = np.array(p.calculateInverseDynamics(self.robotID,jointAngles,jointVel,zero)) - gravityMatrix
+                
+        return massMatrix,gravityMatrix,coriolisMatrix
+        
+        
+        
+        
+
+            
+            
+
+        
+    def do_nothing(self):
+        pass
+        
+    
+        
+        
+if __name__ == "__main__":
+    
+    '''
+    free fall
+    '''
+    
+    # ur5 = UR5manipulator()
+    
+    # p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.VELOCITY_CONTROL,forces = [0]*6)
+    
+    # while p.isConnected():
+    #     time.sleep(0.01)
+    #      ## should do free fall
+    #     p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.TORQUE_CONTROL,forces = [0]*6)
+    #     p.stepSimulation()
+    
+    '''
+    velocity control
+    '''
+    
+    # while p.isConnected:
+    #     #p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.VELOCITY_CONTROL, targetVelocities = [-0.1]*6)
+    #     pos,ori = ur5.getForwardKinematics()
+    #     jacobian = ur5.calculateJacobian(ur5.getInverseKinematics([pos,ori]))
+    #     ## asume vel = [0,0,0,-1,0,0]
+    #     vel = [0,0,0,-0.01,0.00,0.01]
+    #     vel = np.array(vel)
+    #     jointVel = np.dot( np.linalg.inv(jacobian), vel ).tolist()
+    #     p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.VELOCITY_CONTROL, targetVelocities = jointVel)
+    #     p.stepSimulation()
+    
+    
+    # '''
+    # apply counter gravity torque
+    # '''
+    # ur5 = UR5manipulator()
+    
+    
+    # initJointAngles = [0.5, -0.707, 1.0, -1.57, -1.57, -1.57]
+    # ur5.setJointAngles(initJointAngles)
+
+    # p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.VELOCITY_CONTROL,forces = [0]*6)
+    
+    # while True:
+    #     massMatrix,gravityMatrix,coriolisMatrix = ur5.getDynamicMatrices()
+    #     torque = gravityMatrix
+    #     p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.TORQUE_CONTROL,forces = torque)
+    #     p.stepSimulation()
+    
+    
+    ####
+    ##  IMPEDANCE CONTROL DIDN'T WORK
+    
+    '''
+    impedance control. 
+           
+    ur5 = UR5manipulator()
+    
+    
+    initJointAngles = [0.5, -0.707, 1.0, -1.57, -1.57, -1.57]
+    ur5.setJointAngles(initJointAngles)
+    #time.sleep(5)
+
+    desiredEndEffector = ur5.getForwardKinematics()
+    desiredEndEffector = np.hstack((desiredEndEffector[0],desiredEndEffector[1]))
+    p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.VELOCITY_CONTROL,forces = [0]*6)
+    
+    for i in range(ur5.numJoints):
+        p.changeDynamics(ur5.robotID, i, linearDamping=0.0, angularDamping=0.0, jointDamping=0.0)
+        
+    kMatrix = np.diag([10,10,10,1,1,1])
+    cMatrix = np.diag([0,0,0,0,0,0])
+        
+    while True:
+        jointInfo = p.getJointStates(ur5.robotID,ur5.controlableJoints)
+        jointAngles ,jointVel = [],[]
+        
+        for i in range(len(ur5.controlableJoints)):
+            jointAngles.append(jointInfo[i][0])
+            jointVel.append(jointInfo[i][1])
+        
+        pos,Quat = ur5.getForwardKinematics()
+        euler = Quat
+        endEffector = np.hstack((pos,euler))
+        endEffectorVel = np.dot(ur5.calculateJacobian(jointAngles) , jointVel) 
+        
+        deltaX = -endEffector + desiredEndEffector
+        
+        threshHold = 1e-6
+        indices = deltaX < threshHold
+        deltaX[indices] = 0
+        
+        
+        print("deltaX",deltaX)
+        
+        deltaV = -endEffectorVel
+        indices = deltaV < threshHold
+        deltaV[indices] = 0
+        print("DeltaV",deltaV)
+        
+        # springTorque = np.linalg.multi_dot((ur5.calculateJacobian(jointAngles).T,kMatrix,deltaX))
+        # dampingTorque = np.linalg.multi_dot((ur5.calculateJacobian(jointAngles).T,cMatrix,deltaV))
+        
+        springForce = np.dot(kMatrix,deltaX)
+        print("springForce:",springForce)
+        
+        dampingForce = np.dot(cMatrix,deltaV)
+        print("dampingForce",dampingForce)
+        spatialImpedance = springForce + dampingForce
+        jointImpedance = np.dot(ur5.calculateJacobian(jointAngles).T, spatialImpedance)
+        print("jointImpedance:",jointImpedance)
+        
+        massMatrix,gravityMatrix,coriolisMatrix = ur5.getDynamicMatrices()
+        torque = gravityMatrix + jointImpedance
+        p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.TORQUE_CONTROL,forces = torque)
+        p.stepSimulation()
+        '''
+    
+    
+    pass
 
 
