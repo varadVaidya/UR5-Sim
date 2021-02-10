@@ -36,19 +36,21 @@ class UR5manipulator():
 
             if p.getJointInfo(self.robotID,jointIndex)[2] == 0:
                 self.controlableJoints.append(jointIndex)
-        
+                
         print(self.controlableJoints)
         self.endEffectorLink = self.controlableJoints[-1]
+        print("The end effector link is:",self.endEffectorLink)
         
     def turnOFFJointControl(self):
         p.setJointMotorControlArray(self.robotID,self.controlableJoints,p.VELOCITY_CONTROL,forces = [0]*6)
     
     def setJointAngles(self,jointAngles):
         zero = [0]*6 
-        p.setJointMotorControlArray(self.robotID,self.controlableJoints,controlMode = p.POSITION_CONTROL ,targetPositions = jointAngles,targetVelocities = zero,
-                                    positionGains = [1]*6,velocityGains = [1]*6)
+        
         
         for __ in range(200):
+            p.setJointMotorControlArray(self.robotID,self.controlableJoints,controlMode = p.POSITION_CONTROL ,targetPositions = jointAngles,targetVelocities = zero,
+                                    positionGains = [1]*6,velocityGains = [1]*6)
             p.stepSimulation()
             
     def getJointStates(self):
@@ -84,6 +86,7 @@ class UR5manipulator():
         jacobianLinear,jacobianRotational = p.calculateJacobian(self.robotID,self.endEffectorLink,endEffectorState[2],jointNagles,zero,zero)
         
         jacobianLinear = np.array(jacobianLinear)
+
         jacobianRotational = np.array(jacobianRotational)
         
         return np.vstack((jacobianLinear,jacobianRotational))
@@ -158,20 +161,20 @@ if __name__ == "__main__":
     free fall
     '''
     
-    ur5 = UR5manipulator()
+    # ur5 = UR5manipulator()
     
-    p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.VELOCITY_CONTROL,forces = [0]*6)
+    # p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.VELOCITY_CONTROL,forces = [0]*6)
     
-    while p.isConnected():
-        time.sleep(0.01)
-         ## should do free fall
-        p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.TORQUE_CONTROL,forces = np.zeros(6))
-        p.stepSimulation()
+    # while p.isConnected():
+    #     time.sleep(0.01)
+    #      ## should do free fall
+    #     p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.TORQUE_CONTROL,forces = np.zeros(6))
+    #     p.stepSimulation()
     
-    '''
-    velocity control
-    '''
-    
+    # '''
+    # velocity control
+    # '''
+    # ur5 = UR5manipulator()
     # while p.isConnected:
     #     #p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.VELOCITY_CONTROL, targetVelocities = [-0.1]*6)
     #     pos,ori = ur5.getForwardKinematics()
@@ -183,16 +186,27 @@ if __name__ == "__main__":
     #     p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.VELOCITY_CONTROL, targetVelocities = jointVel)
     #     p.stepSimulation()
     
+    '''
+    check forward kinematics
     
-    # '''
-    # apply counter gravity torque
-    # '''
+    '''
+    ur5 = UR5manipulator()
+    initJointAngles = [0.5, -0.707, 1.0, 0, -1, 0.2]
+    print("init Joint Angles are:",initJointAngles)
+    ur5.setJointAngles(initJointAngles)
+    imverseKin = ur5.getInverseKinematics(ur5.getForwardKinematics())
+    print("angles from inverse kinematics",imverseKin)
+    
+    
+    '''
+    apply counter gravity torque
+    '''
     # ur5 = UR5manipulator()
     
     
     # initJointAngles = [0.5, -0.707, 1.0, -1.57, -1.57, -1.57]
     # ur5.setJointAngles(initJointAngles)
-
+    # ur5.calculateJacobian(initJointAngles)
     # p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.VELOCITY_CONTROL,forces = [0]*6)
     
     # while True:
@@ -200,6 +214,32 @@ if __name__ == "__main__":
     #     torque = gravityMatrix
     #     p.setJointMotorControlArray(ur5.robotID,ur5.controlableJoints,p.TORQUE_CONTROL,forces = torque)
     #     p.stepSimulation()
+    
+    '''
+    # ### apply check quaternion map.
+    '''
+    # pi = np.pi
+    # givenEuler = [-pi/4,pi/6,pi/4]
+    # r,pit,y = givenEuler
+    # AMatrix3 = np.array([
+    #         [1,0,np.sin(pit)],
+    #         [0,np.cos(r),-np.cos(pit)*np.sin(r)],
+    #         [0,np.sin(r),np.cos(pit)*np.cos(r)]
+    #     ])
+    # print(AMatrix3)
+    # quat = p.getQuaternionFromEuler(givenEuler) 
+    # euler = p.getEulerFromQuaternion(quat)
+    # matrix = np.array([
+    #         [1,0,np.sin(euler[1])],
+    #         [0,np.cos(euler[0]),-np.cos(euler[1])*np.sin(euler[0])],
+    #         [0,np.sin(r),np.cos(euler[1])*np.cos(euler[0])]
+    #     ])
+    
+    # print("the quat is:",quat)
+    # print("the euler angles for the quaternion are:",euler)
+    # print("the matrixc formed is",matrix)
+    
+    
     
     
     ####

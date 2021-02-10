@@ -13,7 +13,7 @@ from UR5 import UR5manipulator
 arm = UR5manipulator()          # setting up the manipulator
 p.setRealTimeSimulation(0)
 ## set init joint anglees and positon robot their
-initJointAngles = [0.7, -0.707,0.5, 0.1, 0, 0]
+initJointAngles = [0., -1.57,-1.57, 1.57, -1.57, 1.57]
 arm.setJointAngles(initJointAngles)
 
 ## find the gravity matrix for the start. 
@@ -29,8 +29,10 @@ print("Xdes:",xDes)
 for i in range(arm.numJoints):
     p.changeDynamics(arm.robotID, i, linearDamping=0.0, angularDamping=0.0, jointDamping=0.0)
 
-Kp = np.diag(5*[0.1],k=-1)+np.diag(6*[1.5],k=0)+np.diag(5*[0.1],k=1)
-Kd = np.diag(5*[0.1],k=-1)+np.diag(6*[1.2],k=0)+np.diag(5*[0.1],k=1)
+# Kp = np.diag(5*[0.1],k=-1)+np.diag(6*[1.5],k=0)+np.diag(5*[0.1],k=1)
+# Kd = np.diag(5*[0.1],k=-1)+np.diag(6*[1.2],k=0)+np.diag(5*[0.1],k=1)
+Kp = 1.5 * np.eye(6)
+Kd = 1 * np.eye(6)
 externalForce = np.array([0,0,0,0,0,0])
 GUIForce = arm.ForceGUI(externalForce)
 arm.turnOFFJointControl()       # turn off joint control to apply torque
@@ -49,26 +51,28 @@ while True:
     massMatrix,gravityMatrix,coriolisMatrix = arm.getDynamicMatrices()
     #print("massMatrix",massMatrix)
     jacobian = arm.calculateJacobian(jointAngles)
+    aMatrix = arm.calculateAnalyticalVelocityMap()
+    analJacobian = np.dot(np.linalg.inv(aMatrix),jacobian)
     jacobianInv = np.linalg.inv(jacobian)
     massMatrixInv = np.linalg.inv(massMatrix)
     ## calculate the dynamic mstirces in cartesian space
-    spatialInertia = np.linalg.inv( np.linalg.multi_dot(( jacobian, massMatrixInv, jacobian.T)) )
+    spatialInertia = np.linalg.inv( np.linalg.multi_dot(( analJacobian, massMatrixInv, analJacobian.T)) )
+    spatialGravity = np.dot(np.linalg.inv(analJacobian).T,gravityMatrix)
     
-    spatialGravity = np.dot(jacobianInv.T,gravityMatrix)
     
     
     ## calculate current end effector position
     currentX = np.array(arm.getForwardKinematics()).reshape(6)
     deltaX = xDes - currentX    
     
-    aMatrix = arm.calculateAnalyticalVelocityMap()
+    ## calculate applied force
     appliedForce = np.linalg.multi_dot(( np.linalg.inv(aMatrix).T , Kp ,deltaX)) - \
-        np.linalg.multi_dot((Kd,jacobian,jointVelocities)) + spatialGravity
+        np.linalg.multi_dot((Kd,analJacobian,jointVelocities)) + spatialGravity
     #appliedForce = np.linalg.multi_dot((Kp,deltaX)) - np.linalg.multi_dot((Kd,np.linalg.inv(aMatrix),jacobian,jointVelocities)) + gravityMatrix
-    torque = np.dot(jacobian.T,appliedForce) 
+    torque = np.dot(analJacobian.T,np.dot(aMatrix.T,appliedForce)) 
     
     p.applyExternalForce(arm.robotID,arm.endEffectorLink,externalForce[0:3],[0,0,0],flags=p.LINK_FRAME)
-    p.applyExternalTorque(arm.robotID,arm.endEffectorLink,externalForce[3:6],p.LINK_FRAME)  
+    p.applyExternalTorque(arm.robotID,arm.endEffectorLink,externalForce[3:6],p.LINK_FRAME)
     p.setJointMotorControlArray(arm.robotID,arm.controlableJoints,controlMode = p.TORQUE_CONTROL,forces=torque) 
     p.stepSimulation()
 
